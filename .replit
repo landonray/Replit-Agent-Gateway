@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "php-8.2"]
 
 [[artifacts]]
 id = "artifacts/api-server"
