@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { ArrowLeft, Send, Loader2, X, KeyRound } from "lucide-react";
+import { ArrowLeft, Send, Loader2, X, KeyRound, Wrench } from "lucide-react";
 import { Link } from "wouter";
 
 interface Message {
-  role: "user" | "assistant" | "error";
+  role: "user" | "assistant" | "error" | "system";
   content: string;
   actions?: string[];
   usage?: { input_tokens: number; output_tokens: number };
@@ -84,6 +84,48 @@ export default function TestChat() {
     }
   }
 
+  const [loadingTools, setLoadingTools] = useState(false);
+
+  async function fetchTools() {
+    if (!hasCredentials || loadingTools) return;
+    setLoadingTools(true);
+    try {
+      const res = await fetch(`${window.location.origin}/api/v1/tools`, {
+        headers: {
+          "Api-Key": apiKey,
+          "Api-Appid": appId,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "error", content: data.error || `Error ${res.status}` },
+        ]);
+      } else {
+        const toolList = (data.tools || [])
+          .map((t: { name: string; description: string; parameters: string[] }) =>
+            `${t.name} — ${t.description}\n  params: ${t.parameters.join(", ") || "none"}`
+          )
+          .join("\n\n");
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: `${data.tool_count} tools available:\n\n${toolList}`,
+          },
+        ]);
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "error", content: err instanceof Error ? err.message : "Network error" },
+      ]);
+    } finally {
+      setLoadingTools(false);
+    }
+  }
+
   function clearChat() {
     setMessages([]);
     setConversationId(null);
@@ -111,6 +153,14 @@ export default function TestChat() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={fetchTools}
+            disabled={!hasCredentials || loadingTools}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingTools ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+            View Tools
+          </button>
           {messages.length > 0 && (
             <button
               onClick={clearChat}
@@ -169,6 +219,8 @@ export default function TestChat() {
                     ? "bg-primary text-primary-foreground"
                     : msg.role === "error"
                     ? "bg-red-50 border border-red-200 text-red-700"
+                    : msg.role === "system"
+                    ? "bg-slate-100 border border-slate-300 text-slate-700 font-mono text-xs"
                     : "bg-card border border-border text-card-foreground"
                 }`}
               >
