@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace AgentGateway\Controller;
 
 use AgentGateway\Logger;
-use AgentGateway\Service\AnthropicService;
+use AgentGateway\Service\LlmGatewayService;
 use AgentGateway\Service\ConversationService;
 use AgentGateway\Service\SystemPromptService;
 
 class AgentController
 {
-    private AnthropicService $anthropic;
+    private LlmGatewayService $llmGateway;
     private ConversationService $conversation;
 
-    public function __construct(AnthropicService $anthropic, ConversationService $conversation)
+    public function __construct(LlmGatewayService $llmGateway, ConversationService $conversation)
     {
-        $this->anthropic    = $anthropic;
+        $this->llmGateway   = $llmGateway;
         $this->conversation = $conversation;
     }
 
@@ -50,7 +50,7 @@ class AgentController
         );
 
         try {
-            $result = $this->anthropic->sendMessage(
+            $result = $this->llmGateway->sendMessage(
                 $systemPrompt,
                 $messages,
                 $model,
@@ -58,7 +58,7 @@ class AgentController
                 $credentials['app_id']
             );
         } catch (\InvalidArgumentException $e) {
-            $logger->error('Anthropic API bad request', [
+            $logger->error('LLM Gateway bad request', [
                 'error'           => $e->getMessage(),
                 'conversation_id' => $conversationId,
                 'app_id'          => $credentials['app_id'],
@@ -71,7 +71,7 @@ class AgentController
             ]);
             return;
         } catch (\OverflowException $e) {
-            $logger->warning('Anthropic API rate limited', [
+            $logger->warning('LLM Gateway rate limited', [
                 'conversation_id' => $conversationId,
                 'app_id'          => $credentials['app_id'],
             ]);
@@ -83,7 +83,7 @@ class AgentController
             ]);
             return;
         } catch (\RuntimeException $e) {
-            $logger->error('Anthropic API call failed', [
+            $logger->error('LLM Gateway call failed', [
                 'error'           => $e->getMessage(),
                 'conversation_id' => $conversationId,
                 'app_id'          => $credentials['app_id'],

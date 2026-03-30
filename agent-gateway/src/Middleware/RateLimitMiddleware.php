@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AgentGateway\Middleware;
 
 use AgentGateway\Logger;
+use AgentGateway\RedisFactory;
 use Predis\Client as RedisClient;
 
 class RateLimitMiddleware
@@ -14,7 +15,7 @@ class RateLimitMiddleware
     private static function getRedis(): RedisClient
     {
         if (self::$redis === null) {
-            self::$redis = new RedisClient($_ENV['REDIS_URL'] ?? 'redis://localhost:6379');
+            self::$redis = RedisFactory::create($_ENV['REDIS_URL'] ?? 'redis://localhost:6379');
         }
         return self::$redis;
     }

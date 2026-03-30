@@ -17,6 +17,27 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Agent Gateway"
+
+[[workflows.workflow]]
+name = "Agent Gateway"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd agent-gateway && php -S 0.0.0.0:5000 -t public"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -24,3 +45,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+MCP_SERVER_URL = "https://opmcp.replit.app/"

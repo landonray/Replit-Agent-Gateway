@@ -9,7 +9,7 @@ use AgentGateway\Middleware\AuthMiddleware;
 use AgentGateway\Middleware\RateLimitMiddleware;
 use AgentGateway\Middleware\ValidationMiddleware;
 use AgentGateway\Controller\AgentController;
-use AgentGateway\Service\AnthropicService;
+use AgentGateway\Service\LlmGatewayService;
 use AgentGateway\Service\ConversationService;
 
 $envFile = __DIR__ . '/../.env';
@@ -60,8 +60,9 @@ if ($uri === '/api/v1/agent' && $method === 'POST') {
             exit;
         }
 
-        $anthropic = new AnthropicService(
-            $config['anthropic_api_key'],
+        $llmGateway = new LlmGatewayService(
+            $config['llm_gateway_api_key'],
+            $config['llm_gateway_base_url'],
             $config['mcp_server_url'],
             $config['default_model']
         );
@@ -72,7 +73,7 @@ if ($uri === '/api/v1/agent' && $method === 'POST') {
             $config['conversation_max_messages']
         );
 
-        $controller = new AgentController($anthropic, $conversation);
+        $controller = new AgentController($llmGateway, $conversation);
         $controller->handle($body, $credentials);
     } catch (\Throwable $e) {
         \AgentGateway\Logger::get()->error('Unhandled exception', [

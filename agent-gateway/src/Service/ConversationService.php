@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentGateway\Service;
 
+use AgentGateway\RedisFactory;
 use Predis\Client as RedisClient;
 
 class ConversationService
@@ -14,7 +15,7 @@ class ConversationService
 
     public function __construct(string $redisUrl, int $ttl = 86400, int $maxMessages = 20)
     {
-        $this->redis       = new RedisClient($redisUrl);
+        $this->redis       = RedisFactory::create($redisUrl);
         $this->ttl         = $ttl;
         $this->maxMessages = $maxMessages;
     }

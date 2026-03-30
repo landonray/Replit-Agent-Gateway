@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 return [
-    'anthropic_api_key'    => $_ENV['ANTHROPIC_API_KEY'] ?? '',
+    'llm_gateway_api_key'  => $_ENV['LLM_GATEWAY_API_KEY'] ?? '',
+    'llm_gateway_base_url' => $_ENV['LLM_GATEWAY_BASE_URL'] ?? 'https://llm-gateway.replit.app',
     'mcp_server_url'       => $_ENV['MCP_SERVER_URL'] ?? '',
     'redis_url'            => $_ENV['REDIS_URL'] ?? 'redis://localhost:6379',
     'port'                 => (int) ($_ENV['PORT'] ?? 3000),
