@@ -235,13 +235,7 @@ class LlmGatewayService
         $tools = [];
         foreach ($mcpTools as $tool) {
             $schema = $tool['inputSchema'] ?? ['type' => 'object', 'properties' => new \stdClass()];
-
-            if (!isset($schema['type'])) {
-                $schema['type'] = 'object';
-            }
-            if (!isset($schema['properties'])) {
-                $schema['properties'] = new \stdClass();
-            }
+            $schema = $this->sanitizeSchema($schema);
 
             $tools[] = [
                 'type' => 'function',
@@ -254,6 +248,38 @@ class LlmGatewayService
         }
 
         return $tools;
+    }
+
+    private function sanitizeSchema(array $schema): array
+    {
+        if (!isset($schema['type'])) {
+            $schema['type'] = 'object';
+        }
+
+        if ($schema['type'] === 'object') {
+            if (!isset($schema['properties']) || !is_array($schema['properties'])) {
+                $schema['properties'] = new \stdClass();
+            } else {
+                foreach ($schema['properties'] as $propName => &$propDef) {
+                    if (!is_array($propDef)) {
+                        $propDef = ['type' => 'string', 'description' => is_string($propDef) ? $propDef : ''];
+                    } else {
+                        $propDef = $this->sanitizeSchema($propDef);
+                    }
+                }
+                unset($propDef);
+
+                if (empty($schema['properties'])) {
+                    $schema['properties'] = new \stdClass();
+                }
+            }
+        }
+
+        if ($schema['type'] === 'array' && isset($schema['items']) && is_array($schema['items'])) {
+            $schema['items'] = $this->sanitizeSchema($schema['items']);
+        }
+
+        return $schema;
     }
 
     private function summarizeToolCall(string $name, array $args): string
