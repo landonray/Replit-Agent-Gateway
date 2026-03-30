@@ -1,4 +1,4 @@
-import { AlertTriangle, Shield, Key, Terminal, MessageSquare, Zap, ArrowRight, DollarSign, Lock, BookOpen, FlaskConical } from "lucide-react";
+import { AlertTriangle, Shield, Key, Terminal, MessageSquare, Zap, ArrowRight, DollarSign, BookOpen, FlaskConical } from "lucide-react";
 import { Link } from "wouter";
 
 function WarningBanner() {
@@ -295,22 +295,6 @@ export default function InstructionsPage() {
               counts so you can track costs and identify unexpectedly complex requests.</span>
             </li>
           </ul>
-        </Section>
-
-        <Section title="Rate Limits" icon={Lock}>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            To protect your account and the service, the following rate limits apply per API key:
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-lg border border-border p-4 text-center">
-              <div className="text-2xl font-bold text-foreground">10</div>
-              <div className="text-sm text-muted-foreground">requests / minute</div>
-            </div>
-            <div className="rounded-lg border border-border p-4 text-center">
-              <div className="text-2xl font-bold text-foreground">500</div>
-              <div className="text-sm text-muted-foreground">requests / day</div>
-            </div>
-          </div>
         </Section>
 
         <div className="rounded-lg border border-border bg-card p-6 flex items-center justify-between">
