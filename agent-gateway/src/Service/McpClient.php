@@ -40,6 +40,20 @@ class McpClient
      */
     public function listTools(string $apiKey, string $appId): array
     {
+        $response = $this->listToolsRaw($apiKey, $appId);
+
+        if ($response === null || !isset($response['result']['tools'])) {
+            return [];
+        }
+
+        return $response['result']['tools'];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function listToolsRaw(string $apiKey, string $appId): ?array
+    {
         if ($this->sessionId === null) {
             $this->initialize($apiKey, $appId);
         }
@@ -50,10 +64,9 @@ class McpClient
             Logger::get()->warning('MCP tools/list returned no tools', [
                 'response' => $response,
             ]);
-            return [];
         }
 
-        return $response['result']['tools'];
+        return $response;
     }
 
     /**

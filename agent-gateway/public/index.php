@@ -38,9 +38,13 @@ if ($uri === '/api/v1/tools' && $method === 'GET') {
         }
 
         $mcpClient = new \AgentGateway\Service\McpClient($config['mcp_server_url']);
-        $tools = $mcpClient->listTools($credentials['api_key'], $credentials['app_id']);
+        $rawResponse = $mcpClient->listToolsRaw($credentials['api_key'], $credentials['app_id']);
+        $tools = [];
+        if (isset($rawResponse['result']['tools'])) {
+            $tools = $rawResponse['result']['tools'];
+        }
 
-        echo json_encode([
+        $output = [
             'tool_count' => count($tools),
             'tools' => array_map(function ($t) {
                 return [
@@ -49,7 +53,14 @@ if ($uri === '/api/v1/tools' && $method === 'GET') {
                     'parameters' => array_keys($t['inputSchema']['properties'] ?? []),
                 ];
             }, $tools),
-        ], JSON_PRETTY_PRINT);
+            'mcp_server' => $config['mcp_server_url'],
+        ];
+
+        if (count($tools) === 0) {
+            $output['mcp_raw_response'] = $rawResponse;
+        }
+
+        echo json_encode($output, JSON_PRETTY_PRINT);
     } catch (\Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);

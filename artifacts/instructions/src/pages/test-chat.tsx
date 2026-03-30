@@ -102,6 +102,14 @@ export default function TestChat() {
           ...prev,
           { role: "error", content: data.error || `Error ${res.status}` },
         ]);
+      } else if (!data.tool_count) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: `0 tools returned. Full response:\n\n${JSON.stringify(data, null, 2)}`,
+          },
+        ]);
       } else {
         const toolList = (data.tools || [])
           .map((t: { name: string; description: string; parameters: string[] }) =>
