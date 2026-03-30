@@ -211,6 +211,7 @@ class McpClient
 
         $headers = [
             'Content-Type: application/json',
+            'Accept: application/json, text/event-stream',
             "Api-Key: {$apiKey}",
             "Api-Appid: {$appId}",
         ];
@@ -228,8 +229,14 @@ class McpClient
             CURLOPT_TIMEOUT => 10,
         ]);
 
-        curl_exec($ch);
+        $result = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        Logger::get()->info('MCP notification sent', [
+            'method' => $method,
+            'http_code' => $httpCode,
+        ]);
     }
 
     /**
