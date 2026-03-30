@@ -62,7 +62,7 @@ class LlmGatewayService
         $response = $this->request($payload);
         $latencyMs = (int) ((microtime(true) - $startTime) * 1000);
 
-        $responseText = $response['content'] ?? '';
+        $responseText = $this->cleanResponseText($response['content'] ?? '');
         $actionsTaken = [];
         $mcpToolLatencyMs = 0;
         $totalInputTokens  = $response['usage']['prompt_tokens'] ?? 0;
@@ -180,7 +180,7 @@ class LlmGatewayService
             $totalOutputTokens += $response['usage']['completion_tokens'] ?? 0;
         }
 
-        $responseText = $response['content'] ?? '';
+        $responseText = $this->cleanResponseText($response['content'] ?? '');
 
         return [
             'response'            => $responseText,
@@ -254,6 +254,18 @@ class LlmGatewayService
         }
 
         return $tools;
+    }
+
+    private function cleanResponseText(string $text): string
+    {
+        $text = preg_replace('/<invoke\b[^>]*>.*?<\/invoke>/s', '', $text);
+        $text = preg_replace('/<result>.*?<\/result>/s', '', $text);
+        $text = preg_replace('/<tool_call>.*?<\/tool_call>/s', '', $text);
+        $text = preg_replace('/<tool_result>.*?<\/tool_result>/s', '', $text);
+        $text = preg_replace('/<function_call>.*?<\/function_call>/s', '', $text);
+        $text = preg_replace('/<function_result>.*?<\/function_result>/s', '', $text);
+        $text = preg_replace('/\n{3,}/', "\n\n", $text);
+        return trim($text);
     }
 
     private function summarizeToolCall(string $name, array $args): string
