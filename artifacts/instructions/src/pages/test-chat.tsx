@@ -5,7 +5,7 @@ import { Link } from "wouter";
 interface Message {
   role: "user" | "assistant" | "error" | "system";
   content: string;
-  actions?: string[];
+  actions?: unknown[];
   usage?: { input_tokens: number; output_tokens: number };
 }
 
@@ -246,14 +246,21 @@ export default function TestChat() {
                 <p className="whitespace-pre-wrap">{msg.content}</p>
                 {msg.actions && msg.actions.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-border/50 flex flex-wrap gap-1">
-                    {msg.actions.map((action, j) => (
-                      <span
-                        key={j}
-                        className="text-xs font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
-                      >
-                        {action}
-                      </span>
-                    ))}
+                    {msg.actions.map((action: unknown, j: number) => {
+                      const label = typeof action === 'string'
+                        ? action
+                        : typeof action === 'object' && action !== null
+                          ? (action as Record<string, unknown>).tool_name as string || (action as Record<string, unknown>).summary as string || JSON.stringify(action)
+                          : String(action);
+                      return (
+                        <span
+                          key={j}
+                          className="text-xs font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
                 {msg.usage && (
