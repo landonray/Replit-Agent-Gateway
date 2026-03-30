@@ -305,7 +305,16 @@ class LlmGatewayService
         }
 
         if ($httpCode >= 500) {
-            throw new \RuntimeException("LLM Gateway returned HTTP {$httpCode}");
+            Logger::get()->error('LLM Gateway 5xx error', [
+                'http_code' => $httpCode,
+                'body' => mb_substr((string) $result, 0, 1000),
+            ]);
+            $errMsg = "LLM Gateway returned HTTP {$httpCode}";
+            if (is_array($decoded) && isset($decoded['error'])) {
+                $detail = is_string($decoded['error']) ? $decoded['error'] : ($decoded['error']['message'] ?? json_encode($decoded['error']));
+                $errMsg .= ": {$detail}";
+            }
+            throw new \RuntimeException($errMsg);
         }
 
         if (!is_array($decoded)) {

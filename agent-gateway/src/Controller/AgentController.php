@@ -91,7 +91,7 @@ class AgentController
 
             http_response_code(502);
             echo json_encode([
-                'error'  => 'Upstream service error. Please try again.',
+                'error'  => $e->getMessage(),
                 'status' => 502,
             ]);
             return;
