@@ -167,7 +167,23 @@ class McpClient
         }
 
         $decoded = json_decode($responseBody, true);
-        return is_array($decoded) ? $decoded : null;
+        if (!is_array($decoded)) {
+            Logger::get()->warning('MCP response was not valid JSON', [
+                'method' => $method,
+                'http_code' => $httpCode,
+                'content_type' => $contentType,
+                'body_snippet' => mb_substr($responseBody, 0, 300),
+            ]);
+            return [
+                '_debug' => [
+                    'http_code' => $httpCode,
+                    'content_type' => $contentType,
+                    'url' => $this->serverUrl . '/mcp',
+                    'body_snippet' => mb_substr($responseBody, 0, 500),
+                ],
+            ];
+        }
+        return $decoded;
     }
 
     private function sendNotification(string $method, array $params, string $apiKey, string $appId): void
