@@ -49,24 +49,35 @@ export default function TestChat() {
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          { role: "error", content: `Invalid response from server:\n\n${text.slice(0, 1000)}` },
+        ]);
+        return;
+      }
 
       if (!res.ok) {
         setMessages((prev) => [
           ...prev,
-          { role: "error", content: data.error || `Error ${res.status}` },
+          { role: "error", content: (data.error as string) || `Error ${res.status}: ${text.slice(0, 500)}` },
         ]);
       } else {
         if (data.conversation_id) {
-          setConversationId(data.conversation_id);
+          setConversationId(data.conversation_id as string);
         }
+        const content = (data.response as string) ?? `(No response text)\n\nRaw:\n${JSON.stringify(data, null, 2)}`;
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: data.response,
-            actions: data.actions_taken,
-            usage: data.usage,
+            content,
+            actions: data.actions_taken as string[],
+            usage: data.usage as { input_tokens: number; output_tokens: number },
           },
         ]);
       }

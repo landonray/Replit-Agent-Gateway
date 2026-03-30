@@ -27,11 +27,20 @@ class McpClient
             ],
         ], $apiKey, $appId);
 
+        Logger::get()->info('MCP initialize response', [
+            'has_result' => isset($response['result']),
+            'has_session' => $this->sessionId !== null,
+            'response_keys' => $response !== null ? array_keys($response) : null,
+        ]);
+
         if ($response !== null && isset($response['result'])) {
             $this->sendNotification('notifications/initialized', [], $apiKey, $appId);
             return true;
         }
 
+        Logger::get()->warning('MCP initialize failed', [
+            'response' => $response,
+        ]);
         return false;
     }
 
@@ -154,6 +163,10 @@ class McpClient
                 'http_code' => $httpCode,
                 'body' => mb_substr($responseBody, 0, 500),
             ]);
+            $errorDecoded = json_decode($responseBody, true);
+            if (is_array($errorDecoded)) {
+                return $errorDecoded;
+            }
             return null;
         }
 
