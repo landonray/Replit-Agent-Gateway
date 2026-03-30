@@ -10,6 +10,20 @@ name = "react-vite"
 version = "1.0.0"
 
 [[services]]
+name = "agent-gateway"
+paths = [ "/api/v1/", "/health" ]
+localPort = 5000
+
+[services.development]
+run = "php -S 0.0.0.0:5000 -t /home/runner/workspace/agent-gateway/public"
+
+[services.production]
+run = "php -S 0.0.0.0:5000 -t /home/runner/workspace/agent-gateway/public"
+
+[services.env]
+PORT = "5000"
+
+[[services]]
 name = "web"
 paths = [ "/" ]
 localPort = 23093
