@@ -30,6 +30,33 @@ if ($uri === '/health' && $method === 'GET') {
     exit;
 }
 
+if ($uri === '/api/v1/tools' && $method === 'GET') {
+    try {
+        $credentials = AuthMiddleware::handle();
+        if ($credentials === null) {
+            exit;
+        }
+
+        $mcpClient = new \AgentGateway\Service\McpClient($config['mcp_server_url']);
+        $tools = $mcpClient->listTools($credentials['api_key'], $credentials['app_id']);
+
+        echo json_encode([
+            'tool_count' => count($tools),
+            'tools' => array_map(function ($t) {
+                return [
+                    'name' => $t['name'] ?? '',
+                    'description' => $t['description'] ?? '',
+                    'parameters' => array_keys($t['inputSchema']['properties'] ?? []),
+                ];
+            }, $tools),
+        ], JSON_PRETTY_PRINT);
+    } catch (\Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($uri === '/api/v1/agent' && $method === 'POST') {
     try {
         $credentials = AuthMiddleware::handle();
