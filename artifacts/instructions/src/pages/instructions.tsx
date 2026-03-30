@@ -1,6 +1,5 @@
-import { AlertTriangle, Shield, Key, Terminal, MessageSquare, Zap, ArrowRight, DollarSign, Lock, BookOpen } from "lucide-react";
-
-const BASE_URL = import.meta.env.BASE_URL;
+import { AlertTriangle, Shield, Key, Terminal, MessageSquare, Zap, ArrowRight, DollarSign, Lock, BookOpen, FlaskConical } from "lucide-react";
+import { Link } from "wouter";
 
 function WarningBanner() {
   return (
@@ -313,6 +312,23 @@ export default function InstructionsPage() {
             </div>
           </div>
         </Section>
+
+        <div className="rounded-lg border border-border bg-card p-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FlaskConical className="h-5 w-5 text-primary" />
+            <div>
+              <h3 className="font-medium text-foreground">Try it out</h3>
+              <p className="text-sm text-muted-foreground">Test the agent with your own API keys in the browser.</p>
+            </div>
+          </div>
+          <Link
+            href="/test"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Open Test Console
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
 
         <footer className="pt-6 border-t border-border text-center text-xs text-muted-foreground">
           <p>Ontraport Agent Gateway &middot; Beta &middot; Use responsibly</p>

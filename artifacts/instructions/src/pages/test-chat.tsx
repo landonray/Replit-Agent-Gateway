@@ -1,0 +1,233 @@
+import { useState, useRef, useEffect } from "react";
+import { ArrowLeft, Send, Loader2, X, KeyRound } from "lucide-react";
+import { Link } from "wouter";
+
+interface Message {
+  role: "user" | "assistant" | "error";
+  content: string;
+  actions?: string[];
+  usage?: { input_tokens: number; output_tokens: number };
+}
+
+export default function TestChat() {
+  const [apiKey, setApiKey] = useState("");
+  const [appId, setAppId] = useState("");
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const hasCredentials = apiKey.trim() !== "" && appId.trim() !== "";
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function sendMessage() {
+    if (!message.trim() || !hasCredentials || loading) return;
+
+    const userMessage = message.trim();
+    setMessage("");
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setLoading(true);
+
+    try {
+      const body: Record<string, string> = { message: userMessage };
+      if (conversationId) {
+        body.conversation_id = conversationId;
+      }
+
+      const res = await fetch(`${window.location.origin}/api/v1/agent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Api-Key": apiKey,
+          "Api-Appid": appId,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "error", content: data.error || `Error ${res.status}` },
+        ]);
+      } else {
+        if (data.conversation_id) {
+          setConversationId(data.conversation_id);
+        }
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.response,
+            actions: data.actions_taken,
+            usage: data.usage,
+          },
+        ]);
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "error",
+          content: err instanceof Error ? err.message : "Network error",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+      inputRef.current?.focus();
+    }
+  }
+
+  function clearChat() {
+    setMessages([]);
+    setConversationId(null);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="border-b border-border bg-card px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="text-lg font-semibold text-foreground">Agent Test Console</h1>
+          {conversationId && (
+            <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+              {conversationId.slice(0, 12)}...
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {messages.length > 0 && (
+            <button
+              onClick={clearChat}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded hover:bg-muted transition-colors"
+            >
+              <X className="h-3 w-3" />
+              Clear
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="border-b border-border bg-muted/30 px-6 py-3 shrink-0">
+        <div className="max-w-3xl mx-auto flex items-center gap-4">
+          <KeyRound className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="flex gap-3 flex-1">
+            <input
+              type="password"
+              placeholder="Api-Key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="flex-1 text-sm px-3 py-1.5 rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+              autoComplete="off"
+            />
+            <input
+              type="password"
+              placeholder="Api-Appid"
+              value={appId}
+              onChange={(e) => setAppId(e.target.value)}
+              className="w-40 text-sm px-3 py-1.5 rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+              autoComplete="off"
+            />
+          </div>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Not saved</span>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-6 py-6 space-y-4">
+          {messages.length === 0 && (
+            <div className="text-center py-20 space-y-3">
+              <p className="text-muted-foreground text-sm">
+                Enter your Ontraport API credentials above and send a message to test the agent.
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Credentials are only held in memory — they are never saved or stored.
+              </p>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : msg.role === "error"
+                    ? "bg-red-50 border border-red-200 text-red-700"
+                    : "bg-card border border-border text-card-foreground"
+                }`}
+              >
+                <p className="whitespace-pre-wrap">{msg.content}</p>
+                {msg.actions && msg.actions.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-border/50 flex flex-wrap gap-1">
+                    {msg.actions.map((action, j) => (
+                      <span
+                        key={j}
+                        className="text-xs font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
+                      >
+                        {action}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {msg.usage && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {msg.usage.input_tokens} in / {msg.usage.output_tokens} out tokens
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-2 text-muted-foreground text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Thinking...
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      <div className="border-t border-border bg-card px-6 py-3 shrink-0">
+        <div className="max-w-3xl mx-auto flex gap-2">
+          <textarea
+            ref={inputRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={hasCredentials ? "Type a message..." : "Enter API credentials above first"}
+            disabled={!hasCredentials || loading}
+            rows={1}
+            className="flex-1 text-sm px-3 py-2 rounded-md border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-50"
+          />
+          <button
+            onClick={sendMessage}
+            disabled={!message.trim() || !hasCredentials || loading}
+            className="px-3 py-2 rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
