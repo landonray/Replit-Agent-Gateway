@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ArrowLeft, Send, Loader2, X, KeyRound, Wrench } from "lucide-react";
 import { Link } from "wouter";
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   role: "user" | "assistant" | "error" | "system";
@@ -243,7 +244,13 @@ export default function TestChat() {
                     : "bg-card border border-border text-card-foreground"
                 }`}
               >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                {msg.role === "assistant" ? (
+                  <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
                 {msg.actions && msg.actions.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-border/50 flex flex-wrap gap-1">
                     {msg.actions.map((action: unknown, j: number) => {
