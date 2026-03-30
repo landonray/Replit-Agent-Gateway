@@ -256,6 +256,17 @@ class LlmGatewayService
             $schema['type'] = 'object';
         }
 
+        if (isset($schema['required'])) {
+            if (!is_array($schema['required'])) {
+                unset($schema['required']);
+            } else {
+                $schema['required'] = array_values(array_filter($schema['required'], 'is_string'));
+                if (empty($schema['required'])) {
+                    unset($schema['required']);
+                }
+            }
+        }
+
         if ($schema['type'] === 'object') {
             if (!isset($schema['properties']) || !is_array($schema['properties'])) {
                 $schema['properties'] = new \stdClass();
@@ -273,10 +284,40 @@ class LlmGatewayService
                     $schema['properties'] = new \stdClass();
                 }
             }
+
+            if (isset($schema['required']) && is_array($schema['required']) && is_array($schema['properties'])) {
+                $validProps = array_keys($schema['properties']);
+                $schema['required'] = array_values(array_intersect($schema['required'], $validProps));
+                if (empty($schema['required'])) {
+                    unset($schema['required']);
+                }
+            }
         }
 
-        if ($schema['type'] === 'array' && isset($schema['items']) && is_array($schema['items'])) {
-            $schema['items'] = $this->sanitizeSchema($schema['items']);
+        if ($schema['type'] === 'array' && isset($schema['items'])) {
+            if (is_array($schema['items'])) {
+                $schema['items'] = $this->sanitizeSchema($schema['items']);
+            } else {
+                $schema['items'] = ['type' => 'string'];
+            }
+        }
+
+        if (isset($schema['anyOf']) && is_array($schema['anyOf'])) {
+            foreach ($schema['anyOf'] as &$subSchema) {
+                if (is_array($subSchema)) {
+                    $subSchema = $this->sanitizeSchema($subSchema);
+                }
+            }
+            unset($subSchema);
+        }
+
+        if (isset($schema['oneOf']) && is_array($schema['oneOf'])) {
+            foreach ($schema['oneOf'] as &$subSchema) {
+                if (is_array($subSchema)) {
+                    $subSchema = $this->sanitizeSchema($subSchema);
+                }
+            }
+            unset($subSchema);
         }
 
         return $schema;
