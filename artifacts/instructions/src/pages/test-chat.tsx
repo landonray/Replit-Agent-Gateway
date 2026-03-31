@@ -11,8 +11,8 @@ interface Message {
 }
 
 export default function TestChat() {
-  const [apiKey, setApiKey] = useState("");
-  const [appId, setAppId] = useState("");
+  const [apiKey, setApiKey] = useState("82td6Nd8G4cZtz0");
+  const [appId, setAppId] = useState("2_270796_TuspM8iWE");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
