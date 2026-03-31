@@ -119,16 +119,14 @@ if ($uri === '/api/v1/agent' && $method === 'POST') {
             new SchemaValidationService($config['schema_refresh_interval'])
         );
 
-        if ($config['judge_enabled']) {
-            $llmGateway->setLlmJudgeService(
-                new LlmJudgeService(
-                    $config['llm_gateway_api_key'],
-                    $config['llm_gateway_base_url'],
-                    $config['judge_model'],
-                    $config['judge_timeout']
-                )
-            );
-        }
+        $llmGateway->setLlmJudgeService(
+            new LlmJudgeService(
+                $config['llm_gateway_api_key'],
+                $config['llm_gateway_base_url'],
+                $config['judge_model'],
+                $config['judge_timeout']
+            )
+        );
 
         $llmGateway->setCircuitBreakerService(
             new CircuitBreakerService(

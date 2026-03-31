@@ -34,7 +34,7 @@ PROMPT;
     public function __construct(
         string $gatewayApiKey,
         string $gatewayBaseUrl,
-        string $model = 'claude-haiku-4-5-20251001',
+        string $model = 'claude-sonnet-4-20250514',
         int $timeoutSeconds = 15
     ) {
         $this->gatewayApiKey = $gatewayApiKey;
