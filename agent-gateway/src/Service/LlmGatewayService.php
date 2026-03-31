@@ -117,7 +117,7 @@ class LlmGatewayService
     ): array {
         $actionsTaken      = [];
         $response          = $currentResponse;
-        $maxIterations     = 10;
+        $maxIterations     = 50;
         $iteration         = 0;
         $mcpToolLatencyMs  = 0;
         $totalInputTokens  = 0;
