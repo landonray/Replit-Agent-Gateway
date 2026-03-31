@@ -266,7 +266,7 @@ export default function TestChat() {
                     {msg.toolCalls.map((tc, j) => (
                       <div
                         key={j}
-                        className={`text-xs font-mono px-2 py-1 rounded flex items-center gap-1.5 ${
+                        className={`text-xs font-mono px-2 py-1.5 rounded ${
                           tc.success
                             ? tc.deduplicated
                               ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
@@ -274,11 +274,15 @@ export default function TestChat() {
                             : "bg-red-50 text-red-700 border border-red-200"
                         }`}
                       >
-                        <span>{tc.success ? (tc.deduplicated ? "↩" : "✓") : "✗"}</span>
-                        <span className="font-semibold">{tc.tool}</span>
-                        {tc.blocked_by && <span className="text-red-500">({tc.blocked_by})</span>}
-                        {tc.deduplicated && <span className="text-yellow-600">(cached)</span>}
-                        {tc.error && <span className="truncate max-w-xs" title={tc.error}>— {tc.error}</span>}
+                        <div className="flex items-center gap-1.5">
+                          <span>{tc.success ? (tc.deduplicated ? "↩" : "✓") : "✗"}</span>
+                          <span className="font-semibold">{tc.tool}</span>
+                          {tc.blocked_by && <span className="text-red-500">({tc.blocked_by})</span>}
+                          {tc.deduplicated && <span className="text-yellow-600">(cached)</span>}
+                        </div>
+                        {tc.error && (
+                          <p className="mt-1 break-words whitespace-pre-wrap opacity-80">{tc.error}</p>
+                        )}
                       </div>
                     ))}
                   </div>
