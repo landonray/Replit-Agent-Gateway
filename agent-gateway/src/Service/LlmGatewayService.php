@@ -138,14 +138,14 @@ class LlmGatewayService
             $responseContent[] = ['type' => 'text', 'text' => $responseText];
         }
 
-        // Strip the system prompt (index 0) from gateway messages before returning
-        // so conversation history doesn't duplicate the system prompt on each turn
-        $messagesForHistory = array_slice($gatewayMessages, 1);
-
+        // Return the original $messages (user/assistant text history) for conversation
+        // persistence. Tool loop messages (assistant tool_calls, tool results with tool_call_id)
+        // are ephemeral within a single turn — saving them would break the API format on the
+        // next turn because the LLM Gateway requires tool_call_id on tool messages.
         return [
             'response'             => $responseText,
             'response_content'     => $responseContent,
-            'full_messages'        => $messagesForHistory,
+            'full_messages'        => $messages,
             'tool_calls'           => $toolCallResults,
             'actions_taken'        => $actionsTaken,
             'usage'                => [

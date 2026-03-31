@@ -19,6 +19,7 @@ return [
     'default_model' => $_ENV['DEFAULT_MODEL'] ?? 'claude-sonnet-4-20250514',
 
     // LLM Judge settings
+    'judge_enabled' => filter_var($_ENV['JUDGE_ENABLED'] ?? 'true', FILTER_VALIDATE_BOOLEAN),
     'judge_model'   => $_ENV['JUDGE_MODEL'] ?? 'claude-haiku-4-5-20251001',
     'judge_timeout' => (int) ($_ENV['JUDGE_TIMEOUT_SECONDS'] ?? 15),
 

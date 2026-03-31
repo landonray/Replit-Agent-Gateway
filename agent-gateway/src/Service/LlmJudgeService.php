@@ -172,16 +172,32 @@ PROMPT;
         curl_close($ch);
 
         if ($httpCode >= 400) {
+            Logger::get()->error('LLM Judge HTTP error', [
+                'http_code' => $httpCode,
+                'body' => mb_substr((string) $result, 0, 1000),
+                'model' => $this->model,
+            ]);
             throw new \RuntimeException("LLM Judge returned HTTP {$httpCode}: " . mb_substr((string) $result, 0, 500));
         }
 
         $decoded = json_decode((string) $result, true);
         if (!is_array($decoded)) {
+            Logger::get()->error('LLM Judge invalid response', [
+                'body' => mb_substr((string) $result, 0, 500),
+            ]);
             throw new \RuntimeException('LLM Judge returned invalid JSON');
         }
 
+        // Handle both OpenAI-format (choices[].message.content) and direct format (content)
+        $content = '';
+        if (isset($decoded['content'])) {
+            $content = $decoded['content'];
+        } elseif (isset($decoded['choices'][0]['message']['content'])) {
+            $content = $decoded['choices'][0]['message']['content'];
+        }
+
         return [
-            'content' => $decoded['content'] ?? ($decoded['choices'][0]['message']['content'] ?? ''),
+            'content' => $content,
             'usage' => $decoded['usage'] ?? ['prompt_tokens' => 0, 'completion_tokens' => 0],
         ];
     }
