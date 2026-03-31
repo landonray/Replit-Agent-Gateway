@@ -13,6 +13,15 @@ class LlmGatewayService
     private string $defaultModel;
     private McpClient $mcpClient;
 
+    private ?DeduplicationService $dedup = null;
+    private ?SchemaValidationService $schemaValidator = null;
+    private ?LlmJudgeService $judge = null;
+    private ?CircuitBreakerService $circuitBreaker = null;
+
+    private string $accountId = '';
+    private string $conversationId = '';
+    private string $currentUserMessage = '';
+
     public function __construct(
         string $gatewayApiKey,
         string $gatewayBaseUrl,
@@ -25,25 +34,58 @@ class LlmGatewayService
         $this->mcpClient      = new McpClient($mcpServerUrl);
     }
 
+    public function setDeduplicationService(DeduplicationService $dedup): void
+    {
+        $this->dedup = $dedup;
+    }
+
+    public function setSchemaValidationService(SchemaValidationService $validator): void
+    {
+        $this->schemaValidator = $validator;
+    }
+
+    public function setLlmJudgeService(LlmJudgeService $judge): void
+    {
+        $this->judge = $judge;
+    }
+
+    public function setCircuitBreakerService(CircuitBreakerService $cb): void
+    {
+        $this->circuitBreaker = $cb;
+    }
+
     /**
      * @param string $systemPrompt
      * @param list<array{role: string, content: string}> $messages
      * @param string|null $model
      * @param string $userApiKey    Ontraport API key forwarded to MCP
      * @param string $userAppId     Ontraport App ID forwarded to MCP
+     * @param string $conversationId
+     * @param string $currentUserMessage  The user's latest message (for dedup repeat detection)
      *
-     * @return array{response: string, response_content: array, full_messages: array, actions_taken: list<array{tool_name: string, summary: string}>, usage: array{input_tokens: int, output_tokens: int}, anthropic_latency_ms: int, mcp_tool_latency_ms: int}
+     * @return array{response: string, response_content: array, full_messages: array, tool_calls: list<array>, actions_taken: list<array>, usage: array{input_tokens: int, output_tokens: int}, judge_usage: array{input_tokens: int, output_tokens: int}, anthropic_latency_ms: int, mcp_tool_latency_ms: int}
      */
     public function sendMessage(
         string $systemPrompt,
         array $messages,
         ?string $model,
         string $userApiKey,
-        string $userAppId
+        string $userAppId,
+        string $conversationId = '',
+        string $currentUserMessage = ''
     ): array {
         $startTime = microtime(true);
+        $this->accountId = $userAppId;
+        $this->conversationId = $conversationId;
+        $this->currentUserMessage = $currentUserMessage;
 
         $mcpTools = $this->mcpClient->listTools($userApiKey, $userAppId);
+
+        // Load tool manifest into schema validator
+        if ($this->schemaValidator !== null) {
+            $this->schemaValidator->loadManifest($mcpTools);
+        }
+
         $openAiTools = $this->convertToolsToOpenAiFormat($mcpTools);
 
         $gatewayMessages = $this->buildGatewayMessages($systemPrompt, $messages);
@@ -64,9 +106,12 @@ class LlmGatewayService
 
         $responseText = $response['content'] ?? '';
         $actionsTaken = [];
+        $toolCallResults = [];
         $mcpToolLatencyMs = 0;
         $totalInputTokens  = $response['usage']['prompt_tokens'] ?? 0;
         $totalOutputTokens = $response['usage']['completion_tokens'] ?? 0;
+        $totalJudgeInputTokens = 0;
+        $totalJudgeOutputTokens = 0;
 
         if (isset($response['tool_calls']) && is_array($response['tool_calls']) && !empty($response['tool_calls'])) {
             $result = $this->handleToolLoop(
@@ -79,9 +124,12 @@ class LlmGatewayService
             );
             $responseText      = $result['response'];
             $actionsTaken      = $result['actions_taken'];
+            $toolCallResults   = $result['tool_call_results'];
             $mcpToolLatencyMs  = $result['mcp_tool_latency_ms'];
             $totalInputTokens  += $result['total_usage']['input_tokens'];
             $totalOutputTokens += $result['total_usage']['output_tokens'];
+            $totalJudgeInputTokens  += $result['judge_usage']['input_tokens'];
+            $totalJudgeOutputTokens += $result['judge_usage']['output_tokens'];
             $gatewayMessages   = $result['full_messages'];
         }
 
@@ -90,14 +138,23 @@ class LlmGatewayService
             $responseContent[] = ['type' => 'text', 'text' => $responseText];
         }
 
+        // Strip the system prompt (index 0) from gateway messages before returning
+        // so conversation history doesn't duplicate the system prompt on each turn
+        $messagesForHistory = array_slice($gatewayMessages, 1);
+
         return [
             'response'             => $responseText,
             'response_content'     => $responseContent,
-            'full_messages'        => $messages,
+            'full_messages'        => $messagesForHistory,
+            'tool_calls'           => $toolCallResults,
             'actions_taken'        => $actionsTaken,
             'usage'                => [
                 'input_tokens'  => $totalInputTokens,
                 'output_tokens' => $totalOutputTokens,
+            ],
+            'judge_usage'          => [
+                'input_tokens'  => $totalJudgeInputTokens,
+                'output_tokens' => $totalJudgeOutputTokens,
             ],
             'anthropic_latency_ms' => $latencyMs,
             'mcp_tool_latency_ms'  => $mcpToolLatencyMs,
@@ -105,7 +162,7 @@ class LlmGatewayService
     }
 
     /**
-     * @return array{response: string, actions_taken: list<array{tool_name: string, summary: string}>, mcp_tool_latency_ms: int, full_messages: array, total_usage: array{input_tokens: int, output_tokens: int}}
+     * @return array{response: string, actions_taken: list<array>, tool_call_results: list<array>, mcp_tool_latency_ms: int, full_messages: array, total_usage: array{input_tokens: int, output_tokens: int}, judge_usage: array{input_tokens: int, output_tokens: int}}
      */
     private function handleToolLoop(
         array $currentResponse,
@@ -116,13 +173,18 @@ class LlmGatewayService
         array $openAiTools
     ): array {
         $actionsTaken      = [];
+        $toolCallResults   = [];
         $response          = $currentResponse;
         $maxIterations     = 50;
         $iteration         = 0;
         $mcpToolLatencyMs  = 0;
         $totalInputTokens  = 0;
         $totalOutputTokens = 0;
-        $seenToolCalls     = [];
+        $totalJudgeInputTokens  = 0;
+        $totalJudgeOutputTokens = 0;
+
+        $bypassDedup = $this->dedup !== null && $this->dedup->userRequestedRepeat($this->currentUserMessage);
+        $schemaRetryCount = []; // Track retry attempts per tool call: key = "toolName:paramHash" => count
 
         while (isset($response['tool_calls']) && !empty($response['tool_calls']) && $iteration < $maxIterations) {
             $iteration++;
@@ -139,20 +201,183 @@ class LlmGatewayService
                 $functionArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?? [];
                 $toolCallId   = $toolCall['id'] ?? '';
 
-                $callKey = $functionName . ':' . md5(json_encode($functionArgs));
-                if (isset($seenToolCalls[$callKey])) {
-                    Logger::get()->warning('Skipping duplicate tool call', [
-                        'tool' => $functionName,
-                        'args' => $functionArgs,
-                    ]);
-                    $messages[] = [
-                        'role'         => 'tool',
-                        'tool_call_id' => $toolCallId,
-                        'content'      => $seenToolCalls[$callKey],
-                    ];
-                    continue;
+                $isWriteTool = $this->schemaValidator !== null
+                    ? $this->schemaValidator->getToolCategory($functionName) === 'write'
+                    : true;
+                $isCommunicationTool = $this->schemaValidator !== null
+                    ? $this->schemaValidator->isCommunicationTool($functionName)
+                    : false;
+                $isFinancialTool = $this->schemaValidator !== null
+                    ? $this->schemaValidator->isFinancialTool($functionName)
+                    : false;
+
+                // === GUARDRAIL PIPELINE ===
+
+                // 1. Circuit Breaker check (before anything else for account-level protection)
+                if ($this->circuitBreaker !== null) {
+                    $cbResult = $this->circuitBreaker->check(
+                        $this->accountId,
+                        $this->conversationId,
+                        $functionName,
+                        $isWriteTool,
+                        $isCommunicationTool,
+                        $isFinancialTool
+                    );
+                    if ($cbResult !== null) {
+                        Logger::get()->warning('Circuit breaker blocked tool call', [
+                            'tool' => $functionName,
+                            'metric' => $cbResult['metric'],
+                        ]);
+
+                        $errorContent = json_encode([
+                            'success' => false,
+                            'error' => $cbResult['message'],
+                        ]);
+
+                        $toolCallResults[] = [
+                            'tool' => $functionName,
+                            'parameters' => $functionArgs,
+                            'success' => false,
+                            'result' => null,
+                            'error' => $cbResult['message'],
+                            'blocked_by' => 'circuit_breaker',
+                        ];
+
+                        $messages[] = [
+                            'role'         => 'tool',
+                            'tool_call_id' => $toolCallId,
+                            'content'      => $errorContent,
+                        ];
+                        continue;
+                    }
                 }
 
+                // 2. Deduplication check (write tools only)
+                if ($isWriteTool && $this->dedup !== null && !$bypassDedup) {
+                    $dedupResult = $this->dedup->check($this->conversationId, $functionName, $functionArgs);
+                    if ($dedupResult !== null) {
+                        Logger::get()->info('Dedup intercepted duplicate tool call', [
+                            'tool' => $functionName,
+                        ]);
+
+                        $toolCallResults[] = [
+                            'tool' => $functionName,
+                            'parameters' => $functionArgs,
+                            'success' => true,
+                            'result' => $dedupResult,
+                            'deduplicated' => true,
+                        ];
+
+                        $messages[] = [
+                            'role'         => 'tool',
+                            'tool_call_id' => $toolCallId,
+                            'content'      => $dedupResult,
+                        ];
+                        continue;
+                    }
+                }
+
+                // 3. Schema Validation (with 2-retry limit)
+                if ($this->schemaValidator !== null) {
+                    $validationError = $this->schemaValidator->validate($functionName, $functionArgs);
+
+                    if ($validationError !== null) {
+                        $retryKey = $functionName . ':' . md5(json_encode($functionArgs) ?: '{}');
+                        $schemaRetryCount[$retryKey] = ($schemaRetryCount[$retryKey] ?? 0) + 1;
+                        $attemptNum = $schemaRetryCount[$retryKey];
+
+                        Logger::get()->warning('Schema validation failed', [
+                            'tool' => $functionName,
+                            'error' => $validationError,
+                            'params' => $functionArgs,
+                            'retry_attempt' => $attemptNum,
+                        ]);
+
+                        $retryMessage = $attemptNum < 3
+                            ? "Validation error: {$validationError} Please correct the parameters and try again. (Attempt {$attemptNum} of 2)"
+                            : "Validation error: {$validationError} Maximum retry attempts reached. This tool call cannot be completed.";
+
+                        $errorContent = json_encode([
+                            'success' => false,
+                            'error' => $retryMessage,
+                        ]) ?: '{"success":false,"error":"Validation error"}';
+
+                        $toolCallResults[] = [
+                            'tool' => $functionName,
+                            'parameters' => $functionArgs,
+                            'success' => false,
+                            'result' => null,
+                            'error' => $validationError,
+                            'blocked_by' => 'schema_validation',
+                            'retry_attempt' => $attemptNum,
+                        ];
+
+                        $messages[] = [
+                            'role'         => 'tool',
+                            'tool_call_id' => $toolCallId,
+                            'content'      => $errorContent,
+                        ];
+                        continue;
+                    }
+
+                    // Strip extra parameters
+                    $functionArgs = $this->schemaValidator->stripExtraParams($functionName, $functionArgs);
+                }
+
+                // 4. LLM Judge (write tools only)
+                if ($isWriteTool && $this->judge !== null) {
+                    $toolDef = $this->schemaValidator !== null
+                        ? $this->schemaValidator->getToolDefinition($functionName)
+                        : null;
+                    $toolDescription = $toolDef['description'] ?? "Tool: {$functionName}";
+
+                    $judgeResult = $this->judge->review(
+                        $messages,
+                        $functionName,
+                        $functionArgs,
+                        $toolDescription
+                    );
+
+                    $totalJudgeInputTokens  += $judgeResult['judge_usage']['input_tokens'];
+                    $totalJudgeOutputTokens += $judgeResult['judge_usage']['output_tokens'];
+
+                    if (!$judgeResult['approved']) {
+                        Logger::get()->warning('LLM Judge rejected tool call', [
+                            'tool' => $functionName,
+                            'reason' => $judgeResult['reason'],
+                            'confidence' => $judgeResult['confidence'],
+                        ]);
+
+                        $errorContent = json_encode([
+                            'success' => false,
+                            'error' => "Blocked by safety review: {$judgeResult['reason']}",
+                        ]);
+
+                        $toolCallResults[] = [
+                            'tool' => $functionName,
+                            'parameters' => $functionArgs,
+                            'success' => false,
+                            'result' => null,
+                            'error' => "Blocked by safety review: {$judgeResult['reason']}",
+                            'blocked_by' => 'llm_judge',
+                        ];
+
+                        $messages[] = [
+                            'role'         => 'tool',
+                            'tool_call_id' => $toolCallId,
+                            'content'      => $errorContent,
+                        ];
+                        continue;
+                    }
+
+                    Logger::get()->info('LLM Judge approved tool call', [
+                        'tool' => $functionName,
+                        'confidence' => $judgeResult['confidence'],
+                        'reason' => $judgeResult['reason'],
+                    ]);
+                }
+
+                // === EXECUTE TOOL CALL ===
                 $actionsTaken[] = [
                     'tool_name' => $functionName,
                     'summary'   => $this->summarizeToolCall($functionName, $functionArgs),
@@ -173,7 +398,49 @@ class LlmGatewayService
                     $resultContent = json_encode($toolResult);
                 }
 
-                $seenToolCalls[$callKey] = $resultContent;
+                // Determine success from MCP response
+                $toolSuccess = !isset($toolResult['error']) && !($toolResult['isError'] ?? false);
+
+                // Parse structured result from MCP envelope if present
+                $parsedResult = null;
+                $resultJson = json_decode($resultContent, true);
+                if (is_array($resultJson)) {
+                    if (isset($resultJson['success'])) {
+                        $toolSuccess = (bool) $resultJson['success'];
+                    }
+                    $parsedResult = $resultJson['result'] ?? $resultJson;
+                }
+
+                // Record in circuit breaker
+                if ($this->circuitBreaker !== null) {
+                    $this->circuitBreaker->recordExecution(
+                        $this->accountId,
+                        $this->conversationId,
+                        $functionName,
+                        $isWriteTool,
+                        $isCommunicationTool,
+                        $isFinancialTool,
+                        $toolSuccess
+                    );
+                }
+
+                // Record in dedup log (write tools, successful only)
+                if ($isWriteTool && $toolSuccess && $this->dedup !== null) {
+                    $this->dedup->record($this->conversationId, $functionName, $functionArgs, $resultContent);
+                }
+
+                // Build tool_calls entry
+                $toolCallEntry = [
+                    'tool' => $functionName,
+                    'parameters' => $functionArgs,
+                    'success' => $toolSuccess,
+                ];
+                if ($toolSuccess) {
+                    $toolCallEntry['result'] = $parsedResult ?? $resultContent;
+                } else {
+                    $toolCallEntry['error'] = $resultJson['error'] ?? ($toolResult['error'] ?? 'Tool call failed');
+                }
+                $toolCallResults[] = $toolCallEntry;
 
                 $messages[] = [
                     'role'         => 'tool',
@@ -202,11 +469,16 @@ class LlmGatewayService
         return [
             'response'            => $responseText,
             'actions_taken'       => $actionsTaken,
+            'tool_call_results'   => $toolCallResults,
             'mcp_tool_latency_ms' => $mcpToolLatencyMs,
             'full_messages'       => $messages,
             'total_usage'         => [
                 'input_tokens'  => $totalInputTokens,
                 'output_tokens' => $totalOutputTokens,
+            ],
+            'judge_usage'         => [
+                'input_tokens'  => $totalJudgeInputTokens,
+                'output_tokens' => $totalJudgeOutputTokens,
             ],
         ];
     }

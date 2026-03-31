@@ -55,7 +55,9 @@ class AgentController
                 $messages,
                 $model,
                 $credentials['api_key'],
-                $credentials['app_id']
+                $credentials['app_id'],
+                $conversationId,
+                $message
             );
         } catch (\InvalidArgumentException $e) {
             $logger->error('LLM Gateway bad request', [
@@ -112,7 +114,9 @@ class AgentController
             'conversation_id'      => $conversationId,
             'user_message'         => mb_substr($message, 0, 200),
             'tools_called'         => $result['actions_taken'],
+            'tool_calls_count'     => count($result['tool_calls']),
             'usage'                => $result['usage'],
+            'judge_usage'          => $result['judge_usage'],
             'total_latency_ms'     => $totalLatencyMs,
             'anthropic_latency_ms' => $result['anthropic_latency_ms'],
             'mcp_tool_latency_ms'  => $result['mcp_tool_latency_ms'],
@@ -122,7 +126,7 @@ class AgentController
         echo json_encode([
             'response'        => $result['response'],
             'conversation_id' => $conversationId,
-            'actions_taken'   => $result['actions_taken'],
+            'tool_calls'      => $result['tool_calls'],
             'usage'           => $result['usage'],
         ]);
     }

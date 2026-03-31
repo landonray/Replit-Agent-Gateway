@@ -3,10 +3,20 @@ import { ArrowLeft, Send, Loader2, X, KeyRound, Wrench } from "lucide-react";
 import { Link } from "wouter";
 import ReactMarkdown from "react-markdown";
 
+interface ToolCallResult {
+  tool: string;
+  parameters: Record<string, unknown>;
+  success: boolean;
+  result?: unknown;
+  error?: string;
+  blocked_by?: string;
+  deduplicated?: boolean;
+}
+
 interface Message {
   role: "user" | "assistant" | "error" | "system";
   content: string;
-  actions?: unknown[];
+  toolCalls?: ToolCallResult[];
   usage?: { input_tokens: number; output_tokens: number };
 }
 
@@ -77,7 +87,7 @@ export default function TestChat() {
           {
             role: "assistant",
             content,
-            actions: data.actions_taken as string[],
+            toolCalls: (data.tool_calls as ToolCallResult[]) || [],
             usage: data.usage as { input_tokens: number; output_tokens: number },
           },
         ]);
@@ -251,23 +261,26 @@ export default function TestChat() {
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                 )}
-                {msg.actions && msg.actions.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-border/50 flex flex-wrap gap-1">
-                    {msg.actions.map((action: unknown, j: number) => {
-                      const label = typeof action === 'string'
-                        ? action
-                        : typeof action === 'object' && action !== null
-                          ? (action as Record<string, unknown>).tool_name as string || (action as Record<string, unknown>).summary as string || JSON.stringify(action)
-                          : String(action);
-                      return (
-                        <span
-                          key={j}
-                          className="text-xs font-mono bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded"
-                        >
-                          {label}
-                        </span>
-                      );
-                    })}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
+                    {msg.toolCalls.map((tc, j) => (
+                      <div
+                        key={j}
+                        className={`text-xs font-mono px-2 py-1 rounded flex items-center gap-1.5 ${
+                          tc.success
+                            ? tc.deduplicated
+                              ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                              : "bg-green-50 text-green-700 border border-green-200"
+                            : "bg-red-50 text-red-700 border border-red-200"
+                        }`}
+                      >
+                        <span>{tc.success ? (tc.deduplicated ? "↩" : "✓") : "✗"}</span>
+                        <span className="font-semibold">{tc.tool}</span>
+                        {tc.blocked_by && <span className="text-red-500">({tc.blocked_by})</span>}
+                        {tc.deduplicated && <span className="text-yellow-600">(cached)</span>}
+                        {tc.error && <span className="truncate max-w-xs" title={tc.error}>— {tc.error}</span>}
+                      </div>
+                    ))}
                   </div>
                 )}
                 {msg.usage && (

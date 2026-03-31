@@ -11,6 +11,10 @@ use AgentGateway\Middleware\ValidationMiddleware;
 use AgentGateway\Controller\AgentController;
 use AgentGateway\Service\LlmGatewayService;
 use AgentGateway\Service\ConversationService;
+use AgentGateway\Service\DeduplicationService;
+use AgentGateway\Service\SchemaValidationService;
+use AgentGateway\Service\LlmJudgeService;
+use AgentGateway\Service\CircuitBreakerService;
 
 $envFile = __DIR__ . '/../.env';
 if (file_exists($envFile)) {
@@ -98,11 +102,45 @@ if ($uri === '/api/v1/agent' && $method === 'POST') {
             exit;
         }
 
+        // Build LLM Gateway service
         $llmGateway = new LlmGatewayService(
             $config['llm_gateway_api_key'],
             $config['llm_gateway_base_url'],
             $config['mcp_server_url'],
             $config['default_model']
+        );
+
+        // Wire guardrail services
+        $llmGateway->setDeduplicationService(
+            new DeduplicationService($config['redis_url'], $config['conversation_ttl'])
+        );
+
+        $llmGateway->setSchemaValidationService(
+            new SchemaValidationService($config['schema_refresh_interval'])
+        );
+
+        $llmGateway->setLlmJudgeService(
+            new LlmJudgeService(
+                $config['llm_gateway_api_key'],
+                $config['llm_gateway_base_url'],
+                $config['judge_model'],
+                $config['judge_timeout']
+            )
+        );
+
+        $llmGateway->setCircuitBreakerService(
+            new CircuitBreakerService(
+                $config['redis_url'],
+                $config['cb_total_write_limit'],
+                $config['cb_total_write_window'],
+                $config['cb_same_tool_limit'],
+                $config['cb_same_tool_window'],
+                $config['cb_consecutive_failure_limit'],
+                $config['cb_communication_limit'],
+                $config['cb_communication_window'],
+                $config['cb_financial_limit'],
+                $config['cb_financial_window']
+            )
         );
 
         $conversation = new ConversationService(
@@ -123,6 +161,86 @@ if ($uri === '/api/v1/agent' && $method === 'POST') {
             'error'  => 'Internal server error',
             'status' => 500,
         ]);
+    }
+    exit;
+}
+
+// === Admin Endpoints ===
+
+if ($uri === '/api/v1/admin/circuit-breaker/reset' && $method === 'POST') {
+    try {
+        $adminKey = $_SERVER['HTTP_X_ADMIN_KEY'] ?? '';
+        if (empty($config['admin_api_key']) || $adminKey !== $config['admin_api_key']) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            exit;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $accountId = $input['account_id'] ?? '';
+        $metric = $input['metric'] ?? '';
+
+        if (empty($accountId) || empty($metric)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing account_id or metric']);
+            exit;
+        }
+
+        // Sanitize metric to only allow known values
+        $allowedMetrics = [
+            'total_writes', 'communication', 'financial',
+        ];
+        // Also allow tool-specific metrics (tool:{name}) and conversation failures
+        $isToolMetric = str_starts_with($metric, 'tool:') && preg_match('/^tool:[a-zA-Z0-9_]+$/', $metric);
+        $isConvFailure = str_starts_with($metric, 'conv_failures:') && preg_match('/^conv_failures:[a-f0-9]+$/', $metric);
+
+        if (!in_array($metric, $allowedMetrics, true) && !$isToolMetric && !$isConvFailure) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid metric. Allowed: ' . implode(', ', $allowedMetrics) . ', tool:{name}, conv_failures:{id}']);
+            exit;
+        }
+
+        $cb = new CircuitBreakerService($config['redis_url']);
+        $result = $cb->reset($accountId, $metric);
+
+        echo json_encode([
+            'success' => $result,
+            'account_id' => $accountId,
+            'metric' => $metric,
+        ]);
+    } catch (\Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($uri === '/api/v1/admin/circuit-breaker/status' && $method === 'GET') {
+    try {
+        $adminKey = $_SERVER['HTTP_X_ADMIN_KEY'] ?? '';
+        if (empty($config['admin_api_key']) || $adminKey !== $config['admin_api_key']) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            exit;
+        }
+
+        $accountId = $_GET['account_id'] ?? '';
+        if (empty($accountId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Missing account_id query parameter']);
+            exit;
+        }
+
+        $cb = new CircuitBreakerService($config['redis_url']);
+        $status = $cb->getStatus($accountId);
+
+        echo json_encode([
+            'account_id' => $accountId,
+            'circuit_breakers' => $status,
+        ], JSON_PRETTY_PRINT);
+    } catch (\Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
     }
     exit;
 }
