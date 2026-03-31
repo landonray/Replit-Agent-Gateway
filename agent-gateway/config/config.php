@@ -16,13 +16,13 @@ return [
     'conversation_ttl'          => (int) ($_ENV['CONVERSATION_TTL_SECONDS'] ?? 86400),
     'conversation_max_messages' => (int) ($_ENV['CONVERSATION_MAX_MESSAGES'] ?? 20),
 
-    'default_model' => $_ENV['DEFAULT_MODEL'] ?? 'claude-sonnet-4-20250514',
+    'default_model' => $_ENV['DEFAULT_MODEL'] ?? 'claude-opus-4-20250514',
 
     // LLM Judge settings
     // Judge defaults to the same model as the primary agent. Override JUDGE_MODEL
     // to a cheaper model (e.g. claude-haiku-4-5-20251001) once confirmed your
     // LLM Gateway supports it.
-    'judge_model'   => $_ENV['JUDGE_MODEL'] ?? ($_ENV['DEFAULT_MODEL'] ?? 'claude-sonnet-4-20250514'),
+    'judge_model'   => $_ENV['JUDGE_MODEL'] ?? ($_ENV['DEFAULT_MODEL'] ?? 'claude-opus-4-20250514'),
     'judge_timeout' => (int) ($_ENV['JUDGE_TIMEOUT_SECONDS'] ?? 15),
 
     // Circuit breaker defaults (overridable via env)
