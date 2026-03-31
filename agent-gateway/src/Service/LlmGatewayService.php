@@ -351,6 +351,7 @@ class LlmGatewayService
                         $errorContent = json_encode([
                             'success' => false,
                             'error' => "Blocked by safety review: {$judgeResult['reason']}",
+                            'submitted_parameters' => $functionArgs,
                         ]);
 
                         $toolCallResults[] = [

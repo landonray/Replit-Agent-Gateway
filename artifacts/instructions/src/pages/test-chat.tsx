@@ -280,8 +280,13 @@ export default function TestChat() {
                           {tc.blocked_by && <span className="text-red-500">({tc.blocked_by})</span>}
                           {tc.deduplicated && <span className="text-yellow-600">(cached)</span>}
                         </div>
+                        {!tc.success && tc.parameters && Object.keys(tc.parameters).length > 0 && (
+                          <p className="mt-1 break-words whitespace-pre-wrap opacity-60">
+                            Submitted: {JSON.stringify(tc.parameters)}
+                          </p>
+                        )}
                         {tc.error && (
-                          <p className="mt-1 break-words whitespace-pre-wrap opacity-80">{tc.error}</p>
+                          <p className="mt-1 break-words whitespace-pre-wrap opacity-80">— {tc.error}</p>
                         )}
                       </div>
                     ))}
