@@ -117,11 +117,12 @@ class LlmGatewayService
     ): array {
         $actionsTaken      = [];
         $response          = $currentResponse;
-        $maxIterations     = 20;
+        $maxIterations     = 10;
         $iteration         = 0;
         $mcpToolLatencyMs  = 0;
         $totalInputTokens  = 0;
         $totalOutputTokens = 0;
+        $seenToolCalls     = [];
 
         while (isset($response['tool_calls']) && !empty($response['tool_calls']) && $iteration < $maxIterations) {
             $iteration++;
@@ -137,6 +138,20 @@ class LlmGatewayService
                 $functionName = $toolCall['function']['name'] ?? 'unknown';
                 $functionArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?? [];
                 $toolCallId   = $toolCall['id'] ?? '';
+
+                $callKey = $functionName . ':' . md5(json_encode($functionArgs));
+                if (isset($seenToolCalls[$callKey])) {
+                    Logger::get()->warning('Skipping duplicate tool call', [
+                        'tool' => $functionName,
+                        'args' => $functionArgs,
+                    ]);
+                    $messages[] = [
+                        'role'         => 'tool',
+                        'tool_call_id' => $toolCallId,
+                        'content'      => $seenToolCalls[$callKey],
+                    ];
+                    continue;
+                }
 
                 $actionsTaken[] = [
                     'tool_name' => $functionName,
@@ -157,6 +172,8 @@ class LlmGatewayService
                 } else {
                     $resultContent = json_encode($toolResult);
                 }
+
+                $seenToolCalls[$callKey] = $resultContent;
 
                 $messages[] = [
                     'role'         => 'tool',
