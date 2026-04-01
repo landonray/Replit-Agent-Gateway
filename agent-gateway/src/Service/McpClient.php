@@ -89,7 +89,7 @@ class McpClient
 
         $response = $this->jsonRpc('tools/call', [
             'name' => $name,
-            'arguments' => $arguments,
+            'arguments' => empty($arguments) ? new \stdClass() : $arguments,
         ], $apiKey, $appId);
 
         if ($response === null) {

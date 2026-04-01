@@ -215,7 +215,7 @@ class AnthropicService
             ],
             CURLOPT_POSTFIELDS => json_encode([
                 'name'  => $toolName,
-                'input' => $input,
+                'input' => empty($input) ? new \stdClass() : $input,
             ]),
             CURLOPT_TIMEOUT => 30,
         ]);
